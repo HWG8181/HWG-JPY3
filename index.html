@@ -34,7 +34,9 @@ canvas { width:100% !important; height:100% !important; }
   </div>
 
   <div class="card">
-    <div id="pillars">
+    <div id="weights" class="small">大運×20 / 年運×10 / 月運×5 / 日運×1 / 時運×0.5 / 秒運×0.1</div>
+
+      <div id="pillars">
       <div class="pill">大運: <span id="pill-dayun">--</span></div>
       <div class="pill">年運: <span id="pill-year">--</span></div>
       <div class="pill">月運: <span id="pill-month">--</span></div>
@@ -160,7 +162,7 @@ function computeFullScore(d){
   const second = secondPillarByDate(d);
 
   // weights (importance)
-  const weights = { dayun:20, year:5, month:3, day:1, hour:0.5, second:0.1 };
+  const weights = { dayun:20, year:10, month:5, day:1, hour:0.5, second:0.1 };
 
   // accumulate stem mods
   let total = 0;
