@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>HWG/JPY</title>
+<title>HWG/JPY (Auto Pillars - 節気基準 高精度)</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   html, body { height: 100%; margin: 0; }
@@ -17,15 +17,10 @@
   .pill { background:rgba(255,255,255,0.03); padding:6px 8px; border-radius:6px; font-size:13px }
   canvas { width:100% !important; height:100% !important; display:block; margin-top:12px; flex:1 1 auto; }
   .small { font-size:13px; color:#9fb0d8 }
-  /* make header and info not exceed space */
   .topRow { display:flex; justify-content:space-between; align-items:flex-start; gap:12px }
   .infoBox { display:flex; flex-direction:column; align-items:flex-end }
 </style>
-<style>
-html, body { margin:0; padding:0; width:100%; height:100%; }
-#app, .container, .main-wrapper { width:100vw; height:100vh; }
-canvas { width:100% !important; height:100% !important; }
-</style></head>
+</head>
 <body>
 <div class="container">
   <div class="header">
@@ -34,7 +29,6 @@ canvas { width:100% !important; height:100% !important; }
   </div>
 
   <div class="card">
-    
 
       <div id="pillars">
       <div class="pill">大運: <span id="pill-dayun">--</span></div>
@@ -47,16 +41,12 @@ canvas { width:100% !important; height:100% !important; }
 
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        
-        
         <div id="kanshi">現在の秒干支: --</div>
-        
       </div>
       <div style="text-align:right">
         <div id="marketcap" class="small">時価総額: -- 円</div>
         <div id="score">--</div>
-<div id="daily-change" class="text-sm text-gray-500">前月比： --%</div>
-        
+        <div id="daily-change" class="text-sm text-gray-500">前月比： --%</div>
       </div>
     </div>
 
@@ -71,70 +61,201 @@ const BAZI = { year:['甲','申'], month:['辛','未'], day:['壬','子'], hour:
 function getDayunByDate(d){
   const y = d.getFullYear();
   const m = d.getMonth()+1;
-  // 月運切り替え時期を6月と仮定
-  const afterJune = (m >= 6);
-
-  if (y < 2026 || (y === 2026 && !afterJune)) return ['癸','酉']; // 現行
-  if (y < 2036 || (y === 2036 && !afterJune)) return ['甲','戌'];
-  if (y < 2046 || (y === 2046 && !afterJune)) return ['乙','亥'];
-  return ['丙','子'];
+  const afterWuMonth = (m >= 6); // 午月以降で切替
+  if (y < 2026 || (y === 2026 && !afterWuMonth)) return ['癸','酉'];
+  if (y < 2036 || (y === 2036 && !afterWuMonth)) return ['甲','戌'];
+  if (y < 2046 || (y === 2046 && !afterWuMonth)) return ['乙','亥'];
+  if (y < 2056 || (y === 2056 && !afterWuMonth)) return ['丙','子'];
+  return ['丁','丑'];
 }
-
-// 旧: const DAYUN = ['癸','酉'];
 const STEMS=['甲','乙','丙','丁','戊','己','庚','辛','壬','癸'];
 const BRANCHES=['子','丑','寅','卯','辰','巳','午','未','申','酉','戌','亥'];
-// 五行マップ（参考）
 const STEM_WX = { '甲':'木','乙':'木','丙':'火','丁':'火','戊':'土','己':'土','庚':'金','辛':'金','壬':'水','癸':'水' };
 const BRANCH_WX = { '子':'水','丑':'土','寅':'木','卯':'木','辰':'土','巳':'火','午':'火','未':'土','申':'金','酉':'金','戌':'土','亥':'水' };
 
-// Chart.js
+// Chart.js セットアップ
 const ctx = document.getElementById('lineChart').getContext('2d');
 const chart = new Chart(ctx, {
-  type:'line', data:{ labels:[], datasets:[{ label:'Fortune Score', data:[], borderWidth:2, tension:0.3, pointRadius:0, borderColor:'#7CFC00' }] },
-  options:{ responsive:true, animation:false, scales:{ y:{ beginAtZero:true } }, plugins:{ legend:{ display:false } } }
+  type:'line',
+  data:{ labels:[], datasets:[{ label:'Fortune Score', data:[], borderWidth:2, tension:0.3, pointRadius:0, borderColor:'#7CFC00' }] },
+  options:{ responsive:true, animation:false, scales:{ y:{ beginAtZero:false } }, plugins:{ legend:{ display:false } } }
 });
 
-// ---- 干支算出ユーティリティ（簡易だが一貫した算出） ----
+// ---- 干支算出ユーティリティ ----
+// --- 天文計算：太陽の黄経（近似精度は日単位で十分） ---
+function toJulianDay(date){
+  // date is JS Date in UTC
+  const Y = date.getUTCFullYear();
+  let M = date.getUTCMonth()+1; //1..12
+  let D = date.getUTCDate() + (date.getUTCHours()/24) + (date.getUTCMinutes()/1440) + (date.getUTCSeconds()/86400);
+  let y = Y;
+  let m = M;
+  if(m <= 2){ y -= 1; m += 12; }
+  const A = Math.floor(y/100);
+  const B = 2 - A + Math.floor(A/4);
+  const jd = Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + D + B - 1524.5;
+  return jd;
+}
+
+function normalizeAngle(angle){ return (angle % 360 + 360) % 360; }
+
+function sunEclipticLongitudeJD(jd){
+  // NOAA / Meeus 簡易式に基づく計算（適度な精度）
+  const T = (jd - 2451545.0)/36525.0; // centuries since J2000
+  // mean longitude
+  let L0 = 280.46646 + 36000.76983*T + 0.0003032*T*T;
+  L0 = normalizeAngle(L0);
+  // mean anomaly
+  const M = normalizeAngle(357.52911 + 35999.05029*T - 0.0001537*T*T);
+  // eccentricity
+  const e = 0.016708634 - 0.000042037*T - 0.0000001267*T*T;
+  // Sun equation of center
+  const Mr = M * Math.PI/180;
+  const C = (1.914602 - 0.004817*T - 0.000014*T*T)*Math.sin(Mr)
+          + (0.019993 - 0.000101*T)*Math.sin(2*Mr)
+          + 0.000289*Math.sin(3*Mr);
+  // true longitude
+  let trueLong = L0 + C;
+  // apparent ecliptic longitude (neglecting small nutation/aberration terms for simplicity)
+  const omega = 125.04 - 1934.136*T;
+  const lambda = trueLong - 0.00569 - 0.00478*Math.sin(omega*Math.PI/180);
+  return normalizeAngle(lambda);
+}
+
+function sunEclipticLongitude(date){
+  // Accepts JS Date in local time — convert to UTC for JD accuracy
+  const jd = toJulianDay(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds())));
+  return sunEclipticLongitudeJD(jd);
+}
+
+// find time (UTC Date) when sun's ecliptic longitude crosses targetLongitude (deg) near approxDate
+function findSolarTermNear(targetLon, approxDate){
+  // search ±3 days around approxDate by stepping hours to find bracket
+  const target = normalizeAngle(targetLon);
+  const center = new Date(Date.UTC(approxDate.getFullYear(), approxDate.getMonth(), approxDate.getDate()));
+  let start = new Date(center.getTime() - 4*24*3600*1000);
+  let end = new Date(center.getTime() + 4*24*3600*1000);
+  // sample hourly to find sign change in angle difference
+  let prevT = start;
+  let prevA = angleDifference(sunEclipticLongitude(prevT), target);
+  for(let t = start.getTime() + 3600*1000; t <= end.getTime(); t += 3600*1000){
+    const curT = new Date(t);
+    const curA = angleDifference(sunEclipticLongitude(curT), target);
+    if(prevA === 0) return prevT;
+    if(prevA*curA <= 0){
+      // bracket found between prevT and curT, refine by binary search to 1 minute
+      let low = prevT.getTime();
+      let high = curT.getTime();
+      for(let i=0;i<20;i++){
+        const mid = Math.floor((low+high)/2);
+        const midDate = new Date(mid);
+        const a = angleDifference(sunEclipticLongitude(midDate), target);
+        if(a === 0) { low = high = mid; break; }
+        if(prevA * a <= 0){ high = mid; } else { low = mid; prevA = a; }
+      }
+      return new Date(Math.floor((low+high)/2));
+    }
+    prevT = curT; prevA = curA;
+  }
+  return null;
+}
+
+function angleDifference(lon, target){
+  // shortest signed difference lon - target in degrees (-180,180]
+  let d = normalizeAngle(lon - target);
+  if(d > 180) d -= 360;
+  return d;
+}
+
+// compute all 24 solar terms for a given year (returns array of objects with lon and date UTC)
+function computeSolarTermsForYear(year){
+  // target longitudes: 0..345 step 15
+  const terms = [];
+  // approximate guess dates: each term roughly every 15° ~ 15.2 days, start near Jan 1
+  // we'll seed approximate dates by linear spacing starting Feb 4 for 315° (LiChun ~ Feb 4)
+  // but better: sample monthly centers
+  for(let k=0;k<24;k++){
+    const target = normalizeAngle(k*15);
+    // choose approximate date rough mapping: use Jan 1 as 0 and add k*15.218 days from winter solstice
+    // simpler: estimate by distributing across year: Date(year,0,1) + k*(365.2422/24)
+    const approx = new Date(Date.UTC(year,0,1));
+    approx.setUTCDate(approx.getUTCDate() + Math.round(k*(365.2422/24)));
+    const found = findSolarTermNear(target, approx);
+    terms.push({lon:target, date: found});
+  }
+  return terms;
+}
+
+// ---- 干支：年柱（月切替は立春基準） ----
 function yearPillarByDate(d){
-  // 立春(2/4) を境に年が変わるルールの簡易実装
-  const y = d.getFullYear();
-  const lichun = new Date(y,1,4); // 2/4 (approx)
-  const yearForGanZhi = (d >= lichun) ? y : y-1;
-  const idx = (yearForGanZhi - 4) % 60; // 1984 を甲子(=4)基準
+  // Use Li Chun (立春): the year starts at the solar longitude 315° crossing (立春). If date >= LiChun(year) then yearForGanZhi = year, else year-1
+  const year = d.getFullYear();
+  // compute LiChun for this Gregorian year (315°). We compute once and cache per year for performance.
+  if(!yearPillarByDate.cache) yearPillarByDate.cache = {};
+  if(!yearPillarByDate.cache[year]){
+    const terms = computeSolarTermsForYear(year);
+    // LiChun is the term with longitude 315°
+    const li = terms.find(t => t.lon === 315) || null;
+    yearPillarByDate.cache[year] = li && li.date ? li.date : new Date(Date.UTC(year,1,4)); // fallback Feb 4 UTC
+  }
+  const liChun = yearPillarByDate.cache[year];
+  const yearForGanZhi = (d >= liChun) ? year : year-1;
   const stem = STEMS[(yearForGanZhi - 4) % 10];
   const branch = BRANCHES[(yearForGanZhi - 4) % 12];
   return [stem, branch];
 }
 
+// ---- 月柱：節気（太陽黄経）に基づく自動判定（立春を寅月とする） ----
 function monthPillarByDate(d){
-  // 立春起点で月支を決める（簡易）。月番号 1=寅
-  const month = d.getMonth() + 1; // 1..12
-  const day = d.getDate();
-  // if before Feb4 consider previous year shift for month mapping
-  // monthIndex: 0..11 -> 寅..丑
-  // compute offset from Feb
-  const offset = ((month - 2) + (day >= 4 ? 0 : -1) + 12) % 12;
-  const branch = ['寅','卯','辰','巳','午','未','申','酉','戌','亥','子','丑'][offset];
-  // month stem rule: (yearStemIdx*2 + monthNumber -1) %10
+  // Determine sun longitude at the given date (use UTC moment of the date's local time)
+  const dtUTC = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
+  const lon = sunEclipticLongitude(dtUTC);
+  // monthIndex: 0..11 where 0 corresponds to 寅 (starting at 315°..345° -> 寅)
+  const offset = Math.floor(((normalizeAngle(lon - 315) + 360) % 360)/30);
+  const branchIndexOfYin = BRANCHES.indexOf('寅'); // 2
+  const branch = BRANCHES[(branchIndexOfYin + offset) % 12];
+  // monthNumber: 1..12 (寅=1)
+  const monthNumber = offset + 1;
+  // month stem calculation (standard rule): index = (yearStemIndex * 2 + monthNumber + 1) % 10
   const yearStem = yearPillarByDate(d)[0];
   const yIdx = STEMS.indexOf(yearStem);
-  const monthNumber = offset + 1;
-  const stem = STEMS[(yIdx*2 + monthNumber -1) % 10];
+  const stem = STEMS[(yIdx * 2 + monthNumber + 1) % 10];
   return [stem, branch];
 }
 
+// 正確な日干支算出（ユリウス日を利用）
 function dayPillarByDate(d){
-  // 基準日 1984-02-02 を甲子日とする
-  const base = new Date(Date.UTC(1984,1,2,0,0,0));
-  const cur = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(),0,0,0));
-  const diff = Math.round((cur - base)/86400000);
-  const stem = STEMS[(diff % 10 + 10) % 10];
-  const branch = BRANCHES[(diff % 12 + 12) % 12];
+  let year = d.getFullYear();
+  let month = d.getMonth() + 1; // 1..12
+  const day = d.getDate();
+
+  if (month <= 2) { year -= 1; month += 12; }
+
+  const A = Math.floor(year / 100);
+  const B = 2 - A + Math.floor(A / 4);
+  const jd = Math.floor(365.25 * (year + 4716)) + Math.floor(30.6001 * (month + 1)) + day + B - 1524.5;
+  const jdn = Math.floor(jd + 0.5);
+
+  const base = (function(){
+    const y=1984, m=2, d=2;
+    let yy=y, mm=m;
+    if (mm <= 2) { yy -= 1; mm += 12; }
+    const A2 = Math.floor(yy/100);
+    const B2 = 2 - A2 + Math.floor(A2/4);
+    const jd2 = Math.floor(365.25*(yy+4716)) + Math.floor(30.6001*(mm+1)) + d + B2 - 1524.5;
+    return Math.floor(jd2 + 0.5);
+  })();
+
+  const diff = (jdn - base);
+  // adjustment shift so that 2025-11-27 => 庚子 (index 36). Empirically determined shift = +2
+  const SHIFT = 2;
+  const index = (((diff + SHIFT) % 60) + 60) % 60;
+  const stem = STEMS[index % 10];
+  const branch = BRANCHES[index % 12];
   return [stem, branch];
 }
 
 function hourPillarByDate(d){
-  // 時支 index: ((hour+1)//2) %12
   const dayStem = dayPillarByDate(d)[0];
   const hour = d.getHours();
   const idx = Math.floor((hour + 1) / 2) % 12;
@@ -153,18 +274,13 @@ function secondPillarByDate(d){
 
 // ---- 総合スコア算出 ----
 function computeFullScore(d){
-  // compute pillars
-  const dayun = getDayunByDate(d); // given
+  const dayun = getDayunByDate(d);
   const year = yearPillarByDate(d);
   const month = monthPillarByDate(d);
   const day = dayPillarByDate(d);
   const hour = hourPillarByDate(d);
   const second = secondPillarByDate(d);
-
-  // weights (importance)
   const weights = { dayun:20, year:10, month:5, day:1, hour:0.5, second:0.1 };
-
-  // accumulate stem mods
   let total = 0;
   total += (STEM_MOD[dayun[0]] || 0) * weights.dayun;
   total += (STEM_MOD[year[0]] || 0) * weights.year;
@@ -172,8 +288,6 @@ function computeFullScore(d){
   total += (STEM_MOD[day[0]] || 0) * weights.day;
   total += (STEM_MOD[hour[0]] || 0) * weights.hour;
   total += (STEM_MOD[second[0]] || 0) * weights.second;
-
-  // branch numeric contribution (1..12 scaled)
   const bval = function(br){ return (BRANCHES.indexOf(br) + 1) * 0.2; };
   total += bval(dayun[1]) * weights.dayun;
   total += bval(year[1]) * weights.year;
@@ -181,8 +295,6 @@ function computeFullScore(d){
   total += bval(day[1]) * weights.day;
   total += bval(hour[1]) * weights.hour;
   total += bval(second[1]) * weights.second;
-
-  // --- 三合判定（＋方合判定追加済） ---
   function checkSanhe(pillars){
     const groups = {
       '金': ['酉','巳','丑'],
@@ -191,37 +303,27 @@ function computeFullScore(d){
       '木': ['卯','亥','未']
     };
     const baseScore = { '金': -4, '火': 5, '水': -3, '木': 4 };
-
     const list = [BAZI.year[1], BAZI.month[1], pillars.dayun[1], pillars.year[1], pillars.month[1]];
     let score = 0;
-
     for(const k in groups){
       const g = groups[k];
       if(g.every(x => list.includes(x))) score = baseScore[k];
     }
-
     if(score === 0) return 0;
-
     const baziSet = new Set([BAZI.year[1], BAZI.month[1]]);
     const hitsBazi = g => g.filter(x => baziSet.has(x)).length;
-
     const g = Object.values(groups).find(group => group.every(x => list.includes(x)));
-
     const inBazi = g.filter(x => baziSet.has(x)).length;
     const inDayun = g.includes(pillars.dayun[1]);
     const inYear = g.includes(pillars.year[1]);
     const inMonth = g.includes(pillars.month[1]);
-
     if(inBazi >= 1 && inDayun) return score * 5;
     if(inDayun && inYear) return score * 3;
     if(inDayun && inMonth) return score * 1;
     if(inBazi >= 1 && inYear) return score * 2;
-
     return score;
   }
   total += checkSanhe({dayun, year, month});
-
-  // --- 方合判定（すべて凶：-30） ---
   function checkFanghe(pillars){
     const groups = [
       ['寅','卯','辰'], // 木局
@@ -234,8 +336,6 @@ function computeFullScore(d){
     return 0;
   }
   total += checkFanghe({dayun, year, month});
-
-  // --- 半会判定 ---
   function checkBanHui(pillars){
     const pairs = {
       '子申': 1,
@@ -247,30 +347,24 @@ function computeFullScore(d){
       '卯亥': 3,
       '卯未': 2
     };
-
     const baseList = [BAZI.year[1], BAZI.month[1]];
     const list = [BAZI.year[1], BAZI.month[1], pillars.dayun[1], pillars.year[1], pillars.month[1]];
-
     let totalScore = 0;
-
     for(const p in pairs){
       const a = p.charAt(0);
       const b = p.charAt(1);
       if(!(list.includes(a) && list.includes(b))) continue;
-
       let base = pairs[p];
       let mult = 1;
       const inBazi = baseList.includes(a) || baseList.includes(b);
       const inDayun = (pillars.dayun[1] === a || pillars.dayun[1] === b);
       const inYear = (pillars.year[1] === a || pillars.year[1] === b);
       const inMonth = (pillars.month[1] === a || pillars.month[1] === b);
-
       if(inBazi && inDayun) mult = 3;
       else if(inDayun && inYear) mult = 2;
       else if(inDayun && inMonth) mult = 1;
       else if(inBazi && inYear) mult = 2;
       else mult = 1;
-
       totalScore += base * mult;
     }
     return totalScore;
@@ -278,12 +372,8 @@ function computeFullScore(d){
   total += checkBanHui({dayun, year, month});
 
    checkSanhe({dayun, year, month});
-
-  // base + total
   const base = 100;
   let core = base + total;
-
-  // FX-like dynamics (momentum + shock)
   if (typeof computeFullScore.prev === 'undefined') computeFullScore.prev = core;
   if (typeof computeFullScore.vol === 'undefined') computeFullScore.vol = 1.0;
   const prev = computeFullScore.prev;
@@ -293,7 +383,6 @@ function computeFullScore(d){
   const next = prev + momentum + shock + meanRev;
   computeFullScore.vol = 0.85 * computeFullScore.vol + 0.15 * Math.abs(shock) / 3.0;
   computeFullScore.prev = next;
-
   return {
     score: next,
     pillars: { dayun, year, month, day, hour, second },
@@ -312,32 +401,24 @@ function updateUI(){
   document.getElementById('pill-day').innerText = res.pillars.day.join('');
   document.getElementById('pill-hour').innerText = res.pillars.hour.join('');
   document.getElementById('pill-second').innerText = res.pillars.second.join('');
-
   document.getElementById('kanshi').innerText = `現在の秒干支: ${res.pillars.second.join('')}`;
   document.getElementById('score').innerText = `${res.score.toFixed(2)} 円`;
   
-
-  // 合局詳細の表示
-  
-
   // 前月比の計算
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
   const prevRes = computeFullScore(prevDate);
   const mom = ((res.score - prevRes.score) / prevRes.score) * 100;
   document.getElementById('daily-change').innerText = `前月比： ${mom.toFixed(2)}%`;
-
   // 時価総額（例：スコア × 1000）
   const marketcap = (res.score * 10000).toFixed(0);
   document.getElementById('marketcap').innerText = `時価総額: ${marketcap} 円`;
-
   // push chart
   const t = now.toLocaleTimeString();
   chart.data.labels.push(t);
   chart.data.datasets[0].data.push(res.score);
   if(chart.data.labels.length>240){ chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
-  chart.update('none');
+  chart.update();
 }
-
 setInterval(updateUI, 1000);
 updateUI();
 </script>
