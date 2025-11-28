@@ -56,7 +56,7 @@
 
 <script>
 // ----- 設定 -----
-const STEM_MOD = { '癸': -5,'乙': -2,'己': -3,'丙': +5,'丁': +1,'戊': +4,'壬': +1,'庚': -2,'辛': +1,'甲': +3 };
+const STEM_MOD = { '癸': -5,'乙': -2,'己': -2,'丙': +5,'丁': -1,'戊': +4,'壬': -1,'庚': -3,'辛': -2,'甲': +3 };
 const BAZI = { year:['甲','申'], month:['辛','未'], day:['壬','子'], hour:['戊','申'] };
 function getDayunByDate(d){
   const y = d.getFullYear();
@@ -302,7 +302,7 @@ function computeFullScore(d){
       '水': ['子','申','辰'],
       '木': ['卯','亥','未']
     };
-    const baseScore = { '金': -4, '火': 5, '水': -5, '木': 5 };
+    const baseScore = { '金': -6, '火': 8, '水': -5, '木': 5 };
     const list = [BAZI.year[1], BAZI.month[1], pillars.dayun[1], pillars.year[1], pillars.month[1]];
     let score = 0;
     for(const k in groups){
