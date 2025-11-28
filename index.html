@@ -338,8 +338,8 @@ function computeFullScore(d){
   total += checkFanghe({dayun, year, month});
   function checkBanHui(pillars){
     const pairs = {
-      '子申': 1,
-      '子辰': 1,
+      '子申': -1,
+      '子辰': -2,
       '酉巳': -5,
       '酉丑': -5,
       '午戌': 3,
