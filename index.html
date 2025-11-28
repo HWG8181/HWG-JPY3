@@ -302,7 +302,7 @@ function computeFullScore(d){
       '水': ['子','申','辰'],
       '木': ['卯','亥','未']
     };
-    const baseScore = { '金': -4, '火': 5, '水': -3, '木': 4 };
+    const baseScore = { '金': -4, '火': 5, '水': -5, '木': 5 };
     const list = [BAZI.year[1], BAZI.month[1], pillars.dayun[1], pillars.year[1], pillars.month[1]];
     let score = 0;
     for(const k in groups){
