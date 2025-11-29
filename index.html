@@ -44,7 +44,7 @@
         <div id="kanshi">現在の秒干支: --</div>
       </div>
       <div style="text-align:right">
-        <div id="marketcap" class="small">時価総額: -- 円</div>
+       
         <div id="score">--</div>
         <div id="daily-change" class="text-sm text-gray-500">前月比： --%</div>
       </div>
@@ -402,16 +402,13 @@ function updateUI(){
   document.getElementById('pill-hour').innerText = res.pillars.hour.join('');
   document.getElementById('pill-second').innerText = res.pillars.second.join('');
   document.getElementById('kanshi').innerText = `現在の秒干支: ${res.pillars.second.join('')}`;
-  document.getElementById('score').innerText = `${res.score.toFixed(2)} 円`;
+  document.getElementById('score').innerText = `${res.score.toFixed(2)} `;
   
   // 前月比の計算
   const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
   const prevRes = computeFullScore(prevDate);
   const mom = ((res.score - prevRes.score) / prevRes.score) * 100;
   document.getElementById('daily-change').innerText = `前月比： ${mom.toFixed(2)}%`;
-  // 時価総額（例：スコア × 1000）
-  const marketcap = (res.score * 10000).toFixed(0);
-  document.getElementById('marketcap').innerText = `時価総額: ${marketcap} 円`;
   // push chart
   const t = now.toLocaleTimeString();
   chart.data.labels.push(t);
